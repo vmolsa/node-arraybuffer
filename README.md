@@ -25,4 +25,4 @@ And add #include header in source code
 
 ## Example
 
-http://github.com/vmolsa/node-arraybuffer-example
+[node-arraybuffer-example](http://github.com/vmolsa/node-arraybuffer-example)
