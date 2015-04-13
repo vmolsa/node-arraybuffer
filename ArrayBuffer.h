@@ -62,7 +62,7 @@ namespace node {
       return ArrayBuffer::New(isolate, const_cast<void*>(data), length, release);
     }
     
-    inline static ArrayBuffer* New(v8::Isolate *isolate, v8::Local<v8::ArrayBuffer> arrayBuffer) {
+    inline static ArrayBuffer* New(v8::Isolate *isolate, const v8::Local<v8::ArrayBuffer> &arrayBuffer) {
       if (arrayBuffer.IsEmpty()) {
         return ArrayBuffer::New(isolate);
       }

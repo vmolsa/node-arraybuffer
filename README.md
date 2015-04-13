@@ -28,7 +28,7 @@ And add #include header in source code
 ```
 ArrayBuffer* New(v8::Isolate *isolate = 0, void *ptr = 0, size_t length = 0, bool release = false)
 ArrayBuffer* New(v8::Isolate *isolate, const char *ptr, int length = -1, bool release = false)
-ArrayBuffer* New(v8::Isolate *isolate, v8::Local<v8::ArrayBuffer> arrayBuffer)
+ArrayBuffer* New(v8::Isolate *isolate, const v8::Local<v8::ArrayBuffer> &arrayBuffer)
 ArrayBuffer* New(v8::Isolate *isolate, const v8::Local<v8::Value> &arg)
 ```
 
