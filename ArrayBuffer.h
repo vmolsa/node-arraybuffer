@@ -1,6 +1,3 @@
-#ifndef NODEARRAYBUFFER_H
-#define NODEARRAYBUFFER_H
-
 /*
  * The MIT License (MIT)
  * 
@@ -24,7 +21,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  *
-*/
+ */
+
+#ifndef NODEARRAYBUFFER_H
+#define NODEARRAYBUFFER_H
 
 #include <v8.h>
 
@@ -118,7 +118,44 @@ namespace node {
 
       ArrayBufferWrapper<T> *ret = new ArrayBufferWrapper<T>(isolate, content, const_cast<void*>(data), length);
       return static_cast<ArrayBuffer*>(ret);
-    }    
+    }
+    
+    inline static ArrayBuffer* New(v8::Isolate *isolate, const v8::Local<v8::Value> &arg) {
+      if (!arg.IsEmpty()) {            
+        if (arg->IsArrayBuffer() || arg->IsTypedArray()) {
+          v8::Local<v8::ArrayBuffer> arrayBuffer;
+
+          if (arg->IsArrayBuffer()) {
+            arrayBuffer = v8::Local<v8::ArrayBuffer>::Cast(arg);
+          } else {
+            v8::Local<v8::ArrayBufferView> view = v8::Local<v8::ArrayBufferView>::Cast(arg);
+            arrayBuffer = view->Buffer();
+          }
+
+          return ArrayBuffer::New(isolate, arrayBuffer);
+        }
+
+        if (arg->IsString()) {
+          v8::String::Utf8Value str(arg->ToString());
+          int length = str.length();
+          const char *ptr = *str;
+          char *data = 0;
+          
+          if (length > 0) {
+            data = new char[length];
+            data[length] = '\0';
+            
+            for (int index = 0; index < length; index++) {
+              data[index] = ptr[index];
+            }
+          }
+          
+          return ArrayBuffer::New(isolate, data, length, (length > 0));
+        }
+      }
+      
+      return ArrayBuffer::New(isolate);
+    }
      
     inline v8::Local<v8::ArrayBuffer> ToArrayBuffer() const {
       v8::EscapableHandleScope scope(_isolate);
@@ -128,13 +165,13 @@ namespace node {
     v8::Local<v8::String> ToString() const {
       v8::EscapableHandleScope scope(_isolate);
       v8::Local<v8::String> retval = v8::String::NewFromUtf8(_isolate, 
-                                                             ArrayBuffer::String(),
+                                                             ArrayBuffer::ToUtf8(),
                                                              v8::String::kNormalString,
                                                              ArrayBuffer::Length());
       return scope.Escape(retval);
     }
     
-    const char *String() const {
+    const char *ToUtf8() const {
       return reinterpret_cast<const char*>(_data);
     }
     
@@ -176,7 +213,7 @@ namespace node {
     }
     
     virtual ~ArrayBuffer() {
-      if (_rel) {
+      if (_rel && _data) {
         delete [] reinterpret_cast<char*>(_data);
       }
     }
