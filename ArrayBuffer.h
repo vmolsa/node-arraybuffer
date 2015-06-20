@@ -75,30 +75,26 @@ namespace node {
   class ArrayBuffer {
   public:
     inline static ArrayBuffer* New(const char *str = 0) {
-#if NODE_MINOR_VERSION >= 11
+#if NODE_MINOR_VERSION > 11
       return ArrayBuffer::New(v8::Isolate::GetCurrent(), std::string(str));
 #else 
       return ArrayBuffer::New(std::string(str));
 #endif
     }
 
-    inline static ArrayBuffer* New(const char *str, size_t length) {
-#if NODE_MINOR_VERSION >= 11
-      return ArrayBuffer::New(v8::Isolate::GetCurrent(), str, length);
-#else
-      return ArrayBuffer::New(str, length);
-#endif
-    }
-
     inline static ArrayBuffer* New(const std::string &data) {
-#if NODE_MINOR_VERSION >= 11
+#if NODE_MINOR_VERSION > 11
       return ArrayBuffer::New(v8::Isolate::GetCurrent(), data.data(), data.size());
 #else
       return ArrayBuffer::New(data.data(), data.size());
 #endif
     }
 
-#if NODE_MINOR_VERSION >= 11
+#if NODE_MINOR_VERSION > 11
+    inline static ArrayBuffer* New(const char *str, size_t length) {
+      return ArrayBuffer::New(v8::Isolate::GetCurrent(), str, length);
+    }
+    
     inline static ArrayBuffer* New(const v8::Local<v8::ArrayBuffer> &arrayBuffer) {
       return ArrayBuffer::New(v8::Isolate::GetCurrent(), arrayBuffer);
     }
@@ -235,8 +231,9 @@ namespace node {
       ArrayBuffer *buffer = new ArrayBuffer();
 
       v8::Local<v8::Object> global = v8::Context::GetCurrent()->Global();
-      v8::Local<v8::Object> constructor = v8::Object::Cast(global->Get(v8::String::New("ArrayBuffer")));
-      v8::Local<v8::Object> arrayBuffer = constructor->CallAsConstructor();
+      v8::Local<v8::Value> instance = global->Get(v8::String::New("ArrayBuffer"));
+      v8::Local<v8::Function> constructor = v8::Local<v8::Function>::Cast(instance);
+      v8::Local<v8::Object> arrayBuffer = constructor->NewInstance();
 
       buffer->_data = 0;
       buffer->_len = length;
@@ -252,8 +249,8 @@ namespace node {
         arrayBuffer->SetIndexedPropertiesToExternalArrayData(buffer->_data, v8::kExternalByteArray, buffer->_len);
       }
 
-      buffer->_arrayBuffer.Reset(isolate, arrayBuffer);
-      buffer->_arrayBuffer.SetWeak(buffer, ArrayBuffer::onDispose);
+      buffer->_arrayBuffer = v8::Persistent<v8::Object>::New(arrayBuffer);
+      buffer->_arrayBuffer.MakeWeak(buffer, ArrayBuffer::onDispose);
       buffer->_arrayBuffer.MarkIndependent();
 
       arrayBuffer->SetHiddenValue(v8::String::New("node::ArrayBuffer"), v8::External::New(buffer));
@@ -262,7 +259,7 @@ namespace node {
 
     inline static ArrayBuffer* New(const v8::Local<v8::Object> &arrayBuffer) {
       if (!arrayBuffer.IsEmpty()) {
-        v8::Local<v8::Value> ptr = arrayBuffer->GetHiddenValue(v8::String::NewFromUtf8(isolate, "node::ArrayBuffer"));
+        v8::Local<v8::Value> ptr = arrayBuffer->GetHiddenValue(v8::String::New("node::ArrayBuffer"));
 
         if (!ptr.IsEmpty()) {
           v8::Local<v8::External> ext = v8::Local<v8::External>::Cast(ptr);
@@ -272,7 +269,8 @@ namespace node {
             int length = arrayBuffer->GetIndexedPropertiesExternalArrayDataLength();
 
             if (length > 0) {
-              return ArrayBuffer::New(arrayBuffer->GetIndexedPropertiesExternalArrayData(), static_cast<size_t>(length));
+              char *data = static_cast<char*>(arrayBuffer->GetIndexedPropertiesExternalArrayData());
+              return ArrayBuffer::New(data, static_cast<size_t>(length));
             }
           }
         }
@@ -285,19 +283,19 @@ namespace node {
       if (!arg.IsEmpty()) {
         if (arg->IsObject()) {
           v8::Local<v8::Object> arrayBuffer = v8::Local<v8::Object>::Cast(arg);
-          return ArrayBuffer::New(isolate, arrayBuffer);
+          return ArrayBuffer::New(arrayBuffer);
         }
 
         if (arg->IsString()) {
           v8::String::Utf8Value str(arg->ToString());
-          return ArrayBuffer::New(isolate, *str, str.length());
+          return ArrayBuffer::New(*str, str.length());
         }
       }
 
       return ArrayBuffer::New();
     }
 
-    inline v8::Local<v8::ArrayBuffer> ToArrayBuffer() const {
+    inline v8::Local<v8::Object> ToArrayBuffer() const {
       v8::HandleScope scope;
       v8::Local<v8::Object> arrayBuffer = v8::Local<v8::Object>::New(_arrayBuffer);
       return scope.Close(arrayBuffer);
@@ -327,48 +325,59 @@ namespace node {
       return _len;
     }
 
+#if NODE_MINOR_VERSION > 11
     static inline void onDispose(const v8::WeakCallbackData<v8::ArrayBuffer, ArrayBuffer> &info) {
-#if NODE_MINOR_VERSION >= 11
       v8::Isolate *isolate = info.GetIsolate();
       v8::HandleScope scope(isolate);
-#else
-      v8::HandleScope scope;
-#endif
 
       ArrayBuffer *wrap = info.GetParameter();
 
       if (wrap) {
-#if NODE_MINOR_VERSION >= 11
         v8::Local<v8::ArrayBuffer> arrayBuffer = v8::Local<v8::ArrayBuffer>::New(isolate, wrap->_arrayBuffer);
-#else
-        v8::Local<v8::Object> arrayBuffer = v8::Local<v8::Object>::New(wrap->_arrayBuffer);
-#endif
         wrap->_arrayBuffer.Reset();
 
         if (!arrayBuffer.IsEmpty()) {
-#if NODE_MINOR_VERSION >= 11
           arrayBuffer->DeleteHiddenValue(v8::String::NewFromUtf8(isolate, "node::ArrayBuffer"));
-#else
-          arrayBuffer->DeleteHiddenValue(v8::String::New("node::ArrayBuffer"));
-#endif
         }
 
         delete wrap;
       }
     }
+#else
+    static inline void onDispose(v8::Persistent<v8::Value> value, void *data) {
+      v8::HandleScope scope;
+      ArrayBuffer *wrap = static_cast<ArrayBuffer*>(data);
+
+      if (wrap) {
+        v8::Local<v8::Object> arrayBuffer = v8::Local<v8::Object>::New(wrap->_arrayBuffer);
+
+        if (!arrayBuffer.IsEmpty()) {
+          arrayBuffer->DeleteHiddenValue(v8::String::New("node::ArrayBuffer"));
+        }
+
+        delete wrap;
+      }
+    }
+#endif
 
   private:
     virtual ~ArrayBuffer() {
+#if NODE_MINOR_VERSION > 11
       if (_len) {
-        delete[] _data;
+        delete [] _data;
       }
+#else
+      _arrayBuffer.ClearWeak();
+      _arrayBuffer.Dispose();
+      _arrayBuffer.Clear();            
+#endif
     }
 
   protected:
     char* _data;
     size_t _len;
 
-#if NODE_MINOR_VERSION >= 11
+#if NODE_MINOR_VERSION > 11
     v8::Persistent<v8::ArrayBuffer> _arrayBuffer;
 #else
     v8::Persistent<v8::Object> _arrayBuffer;
