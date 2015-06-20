@@ -51,7 +51,7 @@
 *   static ArrayBuffer* New(v8::Isolate *isolate, const v8::Local<v8::Value> &arg)
 *
 *   v8::Local<v8::ArrayBuffer> ToArrayBuffer(v8::Isolate *isolate = 0) const
-*   v8::Local<v8::String> ToStringv8::Isolate *isolate = 0() const
+*   v8::Local<v8::String> ToString(v8::Isolate *isolate = 0) const
 *
 *   const char *ToUtf8() const
 *   void *Data() const
