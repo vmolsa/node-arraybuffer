@@ -64,92 +64,78 @@
 
 #include <node.h>
 #include <v8.h>
+#include <string>
 
 namespace node {
-  template<class T> class ArrayBufferWrapper;
-
 #if NODE_MINOR_VERSION >= 11
 
   class ArrayBuffer {
-    template<class T> friend class ArrayBufferWrapper;
-
   public:
-    inline static ArrayBuffer* New(void *ptr = 0, size_t length = 0, bool release = false) {
-      return ArrayBuffer::New(v8::Isolate::GetCurrent(), ptr, length, release);
+    inline static ArrayBuffer* New(const char *str = 0) {
+      return ArrayBuffer::New(v8::Isolate::GetCurrent(), std::string(str));
     }
 
-    inline static ArrayBuffer* New(const char *ptr, int length = -1, bool release = false) {
-      return ArrayBuffer::New(v8::Isolate::GetCurrent(), ptr, length, release);
+    inline static ArrayBuffer* New(const char *str, size_t length) {
+      return ArrayBuffer::New(v8::Isolate::GetCurrent(), str, length);
     }
 
-    inline static ArrayBuffer* New(const char *ptr, size_t length, bool release = false) {
-      return ArrayBuffer::New(v8::Isolate::GetCurrent(), ptr, length, release);
-    }
-
-    inline static ArrayBuffer* New(char *ptr, size_t length = 0, bool release = false) {
-      return ArrayBuffer::New(v8::Isolate::GetCurrent(), ptr, length, release);
+    inline static ArrayBuffer* New(const std::string &data) {
+      return ArrayBuffer::New(v8::Isolate::GetCurrent(), data.data(), data.size());
     }
 
     inline static ArrayBuffer* New(const v8::Local<v8::ArrayBuffer> &arrayBuffer) {
       return ArrayBuffer::New(v8::Isolate::GetCurrent(), arrayBuffer);
     }
 
-    template<class T>
-    inline static ArrayBuffer* New(const T &content) {
-      return ArrayBuffer::New(v8::Isolate::GetCurrent(), content);
-    }
-
-    template<class T>
-    inline static ArrayBuffer* New(const T &content, void *ptr, size_t length) {
-      return ArrayBuffer::New(v8::Isolate::GetCurrent(), content, ptr, length);
-    }
-
-    template<class T>
-    inline static ArrayBuffer* New(const T &content, const char *ptr, size_t length) {
-      return ArrayBuffer::New(v8::Isolate::GetCurrent(), content, ptr, length);
-    }
-
-    template<class T>
-    inline static ArrayBuffer* New(const T &content, const char *ptr, int length = -1) {
-      return ArrayBuffer::New(v8::Isolate::GetCurrent(), content, ptr, length);
-    }
-
     inline static ArrayBuffer* New(const v8::Local<v8::Value> &arg) {
       return ArrayBuffer::New(v8::Isolate::GetCurrent(), arg);
     }
 
-    inline static ArrayBuffer* New(v8::Isolate *isolate = 0, void *ptr = 0, size_t length = 0, bool release = false) {
-      return ArrayBuffer::New(isolate, ptr, length, release);
+    inline static ArrayBuffer* New(v8::Isolate *isolate, const std::string &data) {
+      return ArrayBuffer::New(isolate, data.data(), data.size());
     }
 
-    inline static ArrayBuffer* New(v8::Isolate *isolate, const char *ptr, int length = -1, bool release = false) {
-      if (length < 0) {
-        for (length = 0; ptr && (ptr[length] || ptr[length] != '\0'); length++) {}
+    inline static ArrayBuffer* New(v8::Isolate *isolate, const char *str = 0) {
+      return ArrayBuffer::New(isolate, std::string(str));
+    }
+
+    inline static ArrayBuffer* New(v8::Isolate *isolate, const char *str, size_t length) {
+      if (!isolate) {
+        isolate = v8::Isolate::GetCurrent();
       }
 
-      return ArrayBuffer::New(isolate, const_cast<char*>(ptr), static_cast<size_t>(length), release);
-    }
+      ArrayBuffer *buffer = new ArrayBuffer();
+      v8::Local<v8::ArrayBuffer> arrayBuffer;
 
-    inline static ArrayBuffer* New(v8::Isolate *isolate, char *ptr, size_t length = 0, bool release = false) {
-      ArrayBuffer *data = new ArrayBuffer(isolate);
-      v8::Local<v8::ArrayBuffer> arrayBuffer = v8::ArrayBuffer::New(data->_isolate, ptr, length);
+      buffer->_len = length;
 
-      data->_rel = release;
-      data->_len = length;
-      data->_data = ptr;
-      data->_arrayBuffer.Reset(isolate, arrayBuffer);
-      data->_arrayBuffer.SetWeak(data, ArrayBuffer::onDispose);
-      data->_arrayBuffer.MarkIndependent();
+      if (length) {
+        buffer->_data = new char[length + 1];
+        buffer->_data[length] = '\0';
 
-      arrayBuffer->SetHiddenValue(v8::String::NewFromUtf8(data->_isolate, "node::ArrayBuffer"), v8::External::New(data->_isolate, data));
-      return data;
-    }
+        for (size_t index = 0; index < length; index++) {
+          buffer->_data[index] = str[index];
+        }
 
-    inline static ArrayBuffer* New(v8::Isolate *isolate, const char *ptr, size_t length, bool release = false) {
-      return ArrayBuffer::New(isolate, const_cast<char*>(ptr), length, release);
+        arrayBuffer = v8::ArrayBuffer::New(isolate, buffer->_data, length);
+      }
+      else {
+        arrayBuffer = v8::ArrayBuffer::New(isolate, length);
+      }
+
+      buffer->_arrayBuffer.Reset(isolate, arrayBuffer);
+      buffer->_arrayBuffer.SetWeak(buffer, ArrayBuffer::onDispose);
+      buffer->_arrayBuffer.MarkIndependent();
+
+      arrayBuffer->SetHiddenValue(v8::String::NewFromUtf8(isolate, "node::ArrayBuffer"), v8::External::New(isolate, buffer));
+      return buffer;
     }
 
     inline static ArrayBuffer* New(v8::Isolate *isolate, const v8::Local<v8::ArrayBuffer> &arrayBuffer) {
+      if (!isolate) {
+        isolate = v8::Isolate::GetCurrent();
+      }
+
       if (arrayBuffer.IsEmpty()) {
         return ArrayBuffer::New(isolate);
       }
@@ -167,50 +153,21 @@ namespace node {
         }
       }
       else {
-        ArrayBuffer *data = new ArrayBuffer(isolate);
+        ArrayBuffer *buffer = new ArrayBuffer();
         v8::ArrayBuffer::Contents content = arrayBuffer->Externalize();
 
-        data->_rel = true;
-        data->_len = content.ByteLength();
-        data->_data = static_cast<char*>(content.Data());
-        data->_arrayBuffer.Reset(data->_isolate, arrayBuffer);
-        data->_arrayBuffer.SetWeak(data, ArrayBuffer::onDispose);
-        data->_arrayBuffer.MarkIndependent();
+        buffer->_data = static_cast<char*>(content.Data());
+        buffer->_len = content.ByteLength();
+        buffer->_arrayBuffer.Reset(isolate, arrayBuffer);
+        buffer->_arrayBuffer.SetWeak(buffer, ArrayBuffer::onDispose);
+        buffer->_arrayBuffer.MarkIndependent();
 
-        arrayBuffer->SetHiddenValue(v8::String::NewFromUtf8(data->_isolate, "node::ArrayBuffer"),
-          v8::External::New(data->_isolate, data));
+        arrayBuffer->SetHiddenValue(v8::String::NewFromUtf8(isolate, "node::ArrayBuffer"), v8::External::New(isolate, buffer));
 
-        return data;
+        return buffer;
       }
 
       return 0;
-    }
-
-    template<class T>
-    inline static ArrayBuffer* New(v8::Isolate *isolate, const T &content) {
-      return ArrayBuffer::New(isolate, content, content.data(), content.size());
-    }
-
-    template<class T>
-    inline static ArrayBuffer* New(v8::Isolate *isolate, const T &content, void *ptr, size_t length = 0) {
-      ArrayBufferWrapper<T> *ret = new ArrayBufferWrapper<T>(isolate, content, ptr, length);
-      return static_cast<ArrayBuffer*>(ret);
-    }
-
-    template<class T>
-    inline static ArrayBuffer* New(v8::Isolate *isolate, const T &content, const char *ptr, size_t length) {
-      ArrayBufferWrapper<T> *ret = new ArrayBufferWrapper<T>(isolate, content, const_cast<char*>(ptr), length);
-      return static_cast<ArrayBuffer*>(ret);
-    }
-
-    template<class T>
-    inline static ArrayBuffer* New(v8::Isolate *isolate, const T &content, const char *ptr, int length = -1) {
-      if (length < 0) {
-        for (length = 0; ptr && (ptr[length] || ptr[length] != '\0'); length++) {}
-      }
-
-      ArrayBufferWrapper<T> *ret = new ArrayBufferWrapper<T>(isolate, content, const_cast<char*>(ptr), static_cast<size_t>(length));
-      return static_cast<ArrayBuffer*>(ret);
     }
 
     inline static ArrayBuffer* New(v8::Isolate *isolate, const v8::Local<v8::Value> &arg) {
@@ -231,34 +188,29 @@ namespace node {
 
         if (arg->IsString()) {
           v8::String::Utf8Value str(arg->ToString());
-          int length = str.length();
-          const char *ptr = *str;
-          char *data = 0;
-
-          if (length > 0) {
-            data = new char[length];
-            data[length] = '\0';
-
-            for (int index = 0; index < length; index++) {
-              data[index] = ptr[index];
-            }
-          }
-
-          return ArrayBuffer::New(isolate, ptr, length, (length > 0));
+          return ArrayBuffer::New(isolate, *str, str.length());
         }
       }
 
       return ArrayBuffer::New(isolate);
     }
 
-    inline v8::Local<v8::ArrayBuffer> ToArrayBuffer() const {
-      v8::EscapableHandleScope scope(_isolate);
-      return scope.Escape(v8::Local<v8::ArrayBuffer>::New(_isolate, _arrayBuffer));
+    inline v8::Local<v8::ArrayBuffer> ToArrayBuffer(v8::Isolate *isolate = 0) const {
+      if (!isolate) {
+        isolate = v8::Isolate::GetCurrent();
+      }
+
+      v8::EscapableHandleScope scope(isolate);
+      return scope.Escape(v8::Local<v8::ArrayBuffer>::New(isolate, _arrayBuffer));
     }
 
-    inline v8::Local<v8::String> ToString() const {
-      v8::EscapableHandleScope scope(_isolate);
-      v8::Local<v8::String> retval = v8::String::NewFromUtf8(_isolate,
+    inline v8::Local<v8::String> ToString(v8::Isolate *isolate = 0) const {
+      if (!isolate) {
+        isolate = v8::Isolate::GetCurrent();
+      }
+
+      v8::EscapableHandleScope scope(isolate);
+      v8::Local<v8::String> retval = v8::String::NewFromUtf8(isolate,
         ArrayBuffer::ToUtf8(),
         v8::String::kNormalString,
         ArrayBuffer::Length());
@@ -281,261 +233,42 @@ namespace node {
       return _len;
     }
 
-    template<class T> inline const T &Unwrap() const {
-      static T nowrap;
-
-      if (_wrap) {
-        const ArrayBufferWrapper<T> *ptr = static_cast<const ArrayBufferWrapper<T>*>(this);
-        return ptr->_content;
-      }
-
-      nowrap = T();
-      return nowrap;
-    }
-
-  private:
-    explicit ArrayBuffer(v8::Isolate *isolate = 0) :
-      _rel(false),
-      _wrap(false),
-      _len(0),
-      _data(0),
-      _isolate(isolate)
-    {
-      if (!_isolate) {
-        _isolate = v8::Isolate::GetCurrent();
-      }
-    }
-
-    virtual ~ArrayBuffer() {
-      if (_rel && _data) {
-        delete[] _data;
-      }
-    }
-
     static inline void onDispose(const v8::WeakCallbackData<v8::ArrayBuffer, ArrayBuffer> &info) {
       v8::Isolate *isolate = info.GetIsolate();
       v8::HandleScope scope(isolate);
 
       ArrayBuffer *wrap = info.GetParameter();
 
-      v8::Local<v8::ArrayBuffer> arrayBuffer = v8::Local<v8::ArrayBuffer>::New(isolate, wrap->_arrayBuffer);
-      wrap->_arrayBuffer.Reset();
+      if (wrap) {
+        v8::Local<v8::ArrayBuffer> arrayBuffer = v8::Local<v8::ArrayBuffer>::New(isolate, wrap->_arrayBuffer);
+        wrap->_arrayBuffer.Reset();
 
-      if (!arrayBuffer.IsEmpty()) {
-        arrayBuffer->DeleteHiddenValue(v8::String::NewFromUtf8(isolate, "node::ArrayBuffer"));
+        if (!arrayBuffer.IsEmpty()) {
+          arrayBuffer->DeleteHiddenValue(v8::String::NewFromUtf8(isolate, "node::ArrayBuffer"));
+        }
+
+        delete wrap;
       }
+    }
 
-      delete wrap;
+  private:
+    virtual ArrayBuffer::~ArrayBuffer() {
+      if (_len) {
+        delete[] _data;
+      }
     }
 
   protected:
-    bool _rel;
-    bool _wrap;
-    size_t _len;
     char* _data;
-    v8::Isolate* _isolate;
+    size_t _len;
     v8::Persistent<v8::ArrayBuffer> _arrayBuffer;
   };
 
 #else
 
-  class ArrayBuffer {
-    template<class T> friend class ArrayBufferWrapper;
-  public:
-    inline static ArrayBuffer* New(void *ptr = 0, size_t length = 0, bool release = false) {
-      return ArrayBuffer::New(isolate, ptr, length, release);
-    }
-
-    inline static ArrayBuffer* New(const char *ptr, int length = -1, bool release = false) {
-      if (length < 0) {
-        for (length = 0; ptr && (ptr[length] || ptr[length] != '\0'); length++) {}
-      }
-
-      return ArrayBuffer::New(const_cast<char*>(ptr), static_cast<size_t>(length), release);
-    }
-
-    inline static ArrayBuffer* New(const char *ptr, size_t length = 0, bool release = false) {
-      return ArrayBuffer::New(const_cast<char*>(ptr), length, release);
-    }
-
-    inline static ArrayBuffer* New(char *ptr, size_t length = 0, bool release = false) {
-      ArrayBuffer *data = new ArrayBuffer();
-
-      v8::Local<v8::Object> global = v8::Context::GetCurrent()->Global();
-      v8::Local<v8::Object> constructor = v8::Object::Cast(global->Get(v8::String::New("ArrayBuffer")));
-      v8::Local<v8::Object> arrayBuffer = constructor->CallAsConstructor();
-
-      arrayBuffer->SetIndexedPropertiesToExternalArrayData(ptr, v8::kExternalByteArray, length);
-
-      data->_rel = release;
-      data->_len = length;
-      data->_data = ptr;
-      data->_arrayBuffer.Reset(arrayBuffer);
-      data->_arrayBuffer.SetWeak(data, ArrayBuffer::onDispose);
-      data->_arrayBuffer.MarkIndependent();
-
-      arrayBuffer->SetHiddenValue(v8::String::New("node::ArrayBuffer"), v8::External::New(data));
-
-      return data;
-    }
-
-    inline static ArrayBuffer* New(const v8::Local<v8::Object> &arrayBuffer) {
-      return 0;
-    }
-
-    template<class T>
-    inline static ArrayBuffer* New(const T &content) {
-      return ArrayBuffer::New(content, content.data(), content.size());
-    }
-
-    template<class T>
-    inline static ArrayBuffer* New(const T &content, void *ptr, size_t length = 0) {
-      ArrayBufferWrapper<T> *ret = new ArrayBufferWrapper<T>(isolate, content, ptr, length);
-      return static_cast<ArrayBuffer*>(ret);
-    }
-
-    template<class T>
-    inline static ArrayBuffer* New(const T &content, const char *ptr, size_t length) {
-      ArrayBufferWrapper<T> *ret = new ArrayBufferWrapper<T>(isolate, content, const_cast<char*>(ptr), length);
-      return static_cast<ArrayBuffer*>(ret);
-    }
-
-    template<class T>
-    inline static ArrayBuffer* New(const T &content, const char *ptr, int length = -1) {
-      if (length < 0) {
-        for (length = 0; ptr && (ptr[length] || ptr[length] != '\0'); length++) {}
-      }
-
-      ArrayBufferWrapper<T> *ret = new ArrayBufferWrapper<T>(isolate, content, const_cast<char*>(ptr), static_cast<size_t>(length));
-      return static_cast<ArrayBuffer*>(ret);
-    }
-
-    inline static ArrayBuffer* New(const v8::Local<v8::Value> &arg) {
-      return 0;
-    }
-
-    inline v8::Local<v8::ArrayBuffer> ToArrayBuffer() const {
-      v8::HandleScope scope;
-      return scope.Close(v8::Local<v8::Object>::New(_arrayBuffer));
-    }
-
-    inline v8::Local<v8::String> ToString() const {
-      v8::HandleScope scope;
-      return scope.Close(v8::String::New(ArrayBuffer::ToUtf8(), ArrayBuffer::Length()));
-    }
-
-    inline const char *ToUtf8() const {
-      return _data;
-    }
-
-    inline void *Data() const {
-      return _data;
-    }
-
-    inline size_t Length() const {
-      return _len;
-    }
-
-    inline size_t ByteLength() const {
-      return _len;
-    }
-
-    inline const T &Unwrap() const {
-      static T nowrap;
-
-      if (_wrap) {
-        const ArrayBufferWrapper<T> *ptr = static_cast<const ArrayBufferWrapper<T>*>(this);
-        return ptr->_content;
-      }
-
-      nowrap = T();
-      return nowrap;
-    }
-
-  private:
-    explicit ArrayBuffer() :
-      _rel(false),
-      _wrap(false),
-      _len(0),
-      _data(0),
-      {}
-
-      virtual ~ArrayBuffer() {
-      if (_rel && _data) {
-        delete[] _data;
-      }
-    }
-
-    static inline void onDispose(const v8::WeakCallbackData<v8::Object, ArrayBuffer> &info) {
-      v8::HandleScope scope;
-      ArrayBuffer *wrap = info.GetParameter();
-
-      v8::Local<v8::Object> arrayBuffer = v8::Local<v8::Object>::New(wrap->_arrayBuffer);
-      wrap->_arrayBuffer.Reset();
-
-      if (!arrayBuffer.IsEmpty()) {
-        arrayBuffer->DeleteHiddenValue(v8::String::New("node::ArrayBuffer"));
-      }
-
-      delete wrap;
-    }
-
-  protected:
-    bool _rel;
-    bool _wrap;
-    size_t _len;
-    char* _data;
-    v8::Persistent<v8::Object> _arrayBuffer;
-  };
 
 #endif
 
-  template<class T> class ArrayBufferWrapper : public ArrayBuffer {
-    friend class ArrayBuffer;
-
-  private:
-#if NODE_MINOR_VERSION >= 11
-    explicit ArrayBufferWrapper(v8::Isolate *isolate, const T &content, char *ptr = 0, size_t length = 0) :
-      ArrayBuffer(isolate),
-      _content(content)
-    {
-      v8::Local<v8::ArrayBuffer> arrayBuffer = v8::ArrayBuffer::New(_isolate, ptr, length);
-
-      _wrap = true;
-      _len = length;
-      _data = ptr;
-      _arrayBuffer.Reset(_isolate, arrayBuffer);
-      _arrayBuffer.SetWeak(static_cast<ArrayBuffer*>(this), ArrayBuffer::onDispose);
-      _arrayBuffer.MarkIndependent();
-
-      arrayBuffer->SetHiddenValue(v8::String::NewFromUtf8(_isolate, "node::ArrayBuffer"), v8::External::New(_isolate, this));
-    }
-#else
-    explicit ArrayBufferWrapper(const T &content, char *ptr = 0, size_t length = 0) :
-      _content(content)
-    {
-      v8::Local<v8::Object> global = v8::Context::GetCurrent()->Global();
-      v8::Local<v8::Object> constructor = v8::Object::Cast(global->Get(v8::String::New("ArrayBuffer")));
-      v8::Local<v8::Object> arrayBuffer = constructor->CallAsConstructor();
-
-      arrayBuffer->SetIndexedPropertiesToExternalArrayData(ptr, v8::kExternalByteArray, length);
-
-      _wrap = true;
-      _len = length;
-      _data = ptr;
-      _arrayBuffer.Reset(arrayBuffer);
-      _arrayBuffer.SetWeak(static_cast<ArrayBuffer*>(this), ArrayBuffer::onDispose);
-      _arrayBuffer.MarkIndependent();
-
-      arrayBuffer->SetHiddenValue(v8::String::New("node::ArrayBuffer"), v8::External::New(this));
-    }
-#endif
-
-    virtual ~ArrayBufferWrapper() { }
-
-  protected:
-    T _content;
-  };
 };
 
 #endif
