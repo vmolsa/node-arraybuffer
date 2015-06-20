@@ -252,7 +252,7 @@ namespace node {
     }
 
   private:
-    virtual ArrayBuffer::~ArrayBuffer() {
+    virtual ~ArrayBuffer() {
       if (_len) {
         delete[] _data;
       }
