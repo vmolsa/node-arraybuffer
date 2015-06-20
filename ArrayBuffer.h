@@ -251,14 +251,14 @@ namespace node {
       }
     }
 
-  private:
+   private:
     virtual ~ArrayBuffer() {
       if (_len) {
         delete[] _data;
       }
     }
 
-  protected:
+   protected:
     char* _data;
     size_t _len;
     v8::Persistent<v8::ArrayBuffer> _arrayBuffer;
