@@ -1,6 +1,6 @@
 {
   "name": "node-arraybuffer",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "NodeJS C++ ArrayBuffer handler",
   "author": "vmolsa <ville.molsa@gmail.com> (http://github.com/vmolsa)",
   "license": "MIT",
