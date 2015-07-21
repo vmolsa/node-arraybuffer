@@ -27,7 +27,7 @@
 *   static ArrayBuffer* New(const std::string &data)
 *   static ArrayBuffer* New(const v8::Local<v8::Object> &arrayBuffer)
 *   static ArrayBuffer* New(const v8::Local<v8::Value> &arg)
-*   
+*
 *   v8::Local<v8::Object> ToArrayBuffer() const
 *   v8::Local<v8::String> ToString() const
 *
@@ -75,26 +75,26 @@ namespace node {
   class ArrayBuffer {
   public:
     inline static ArrayBuffer* New(const char *str = 0) {
-#if NODE_MINOR_VERSION > 11
+#if NODE_MODULE_VERSION >= NODE_0_12_MODULE_VERSION
       return ArrayBuffer::New(v8::Isolate::GetCurrent(), std::string(str));
-#else 
+#else
       return ArrayBuffer::New(std::string(str));
 #endif
     }
 
     inline static ArrayBuffer* New(const std::string &data) {
-#if NODE_MINOR_VERSION > 11
+#if NODE_MODULE_VERSION >= NODE_0_12_MODULE_VERSION
       return ArrayBuffer::New(v8::Isolate::GetCurrent(), data.data(), data.size());
 #else
       return ArrayBuffer::New(data.data(), data.size());
 #endif
     }
 
-#if NODE_MINOR_VERSION > 11
+#if NODE_MODULE_VERSION >= NODE_0_12_MODULE_VERSION
     inline static ArrayBuffer* New(const char *str, size_t length) {
       return ArrayBuffer::New(v8::Isolate::GetCurrent(), str, length);
     }
-    
+
     inline static ArrayBuffer* New(const v8::Local<v8::ArrayBuffer> &arrayBuffer) {
       return ArrayBuffer::New(v8::Isolate::GetCurrent(), arrayBuffer);
     }
@@ -325,7 +325,7 @@ namespace node {
       return _len;
     }
 
-#if NODE_MINOR_VERSION > 11
+#if NODE_MODULE_VERSION >= NODE_0_12_MODULE_VERSION
     static inline void onDispose(const v8::WeakCallbackData<v8::ArrayBuffer, ArrayBuffer> &info) {
       v8::Isolate *isolate = info.GetIsolate();
       v8::HandleScope scope(isolate);
@@ -362,14 +362,14 @@ namespace node {
 
   private:
     virtual ~ArrayBuffer() {
-#if NODE_MINOR_VERSION > 11
+#if NODE_MODULE_VERSION >= NODE_0_12_MODULE_VERSION
       if (_len) {
         delete [] _data;
       }
 #else
       _arrayBuffer.ClearWeak();
       _arrayBuffer.Dispose();
-      _arrayBuffer.Clear();            
+      _arrayBuffer.Clear();
 #endif
     }
 
@@ -377,7 +377,7 @@ namespace node {
     char* _data;
     size_t _len;
 
-#if NODE_MINOR_VERSION > 11
+#if NODE_MODULE_VERSION >= NODE_0_12_MODULE_VERSION
     v8::Persistent<v8::ArrayBuffer> _arrayBuffer;
 #else
     v8::Persistent<v8::Object> _arrayBuffer;
